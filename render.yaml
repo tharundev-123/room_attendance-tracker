@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: room-attendance-tracker
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+    disk:
+      name: attendance-data
+      mountPath: /var/data
+      sizeGB: 1

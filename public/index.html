@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Room Attendance</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="/icon.svg">
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e9f0;--green:#16a34a;--red:#dc2626;--amber:#d97706;--blue:#2563eb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,input{font:inherit}button{border:0;cursor:pointer}.app{max-width:720px;margin:auto;padding:16px 14px 36px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.brand{font-size:22px;font-weight:800}.sub{color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 3px 15px #1720330a}
+h2,h3{margin:0 0 12px}.row{display:flex;gap:8px;align-items:center}.wrap{flex-wrap:wrap}
+input{width:100%;border:1px solid #d7dce5;border-radius:12px;padding:12px;background:#fff;outline:none}input:focus{border-color:var(--blue)}
+.btn{padding:11px 14px;border-radius:12px;background:#111827;color:#fff;font-weight:700}.btn.secondary{background:#eef2f7;color:#172033}.btn.blue{background:var(--blue)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{padding:13px;border:1px solid var(--line);border-radius:14px}.stat b{display:block;font-size:22px}.stat span{font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:7px;overflow:auto;margin-bottom:14px}.tab{white-space:nowrap;padding:9px 13px;border-radius:999px;background:#e9edf3;color:#4b5563;font-weight:700}.tab.active{background:#111827;color:white}
+.member{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.member:last-child{border-bottom:0}
+.name{font-weight:750}.pct{font-size:12px;color:var(--muted);margin-top:2px}.actions{display:flex;gap:6px}.mark{min-width:48px;padding:9px;border-radius:10px;font-weight:800;background:#f0f2f5;color:#687184}.mark.on.present{background:#dcfce7;color:#166534}.mark.on.absent{background:#fee2e2;color:#991b1b}.mark.on.leave{background:#fef3c7;color:#92400e}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2f7;font-size:12px;font-weight:700}.notice{font-size:13px;color:var(--muted);line-height:1.5}.log{padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}.log:last-child{border:0}.log small{display:block;color:var(--muted)}
+.hidden{display:none!important}.danger{color:var(--red)}.empty{text-align:center;color:var(--muted);padding:20px}
+@media(max-width:460px){.grid{grid-template-columns:1fr 1fr}.member{grid-template-columns:1fr auto}.actions{gap:4px}.mark{min-width:43px;padding:9px 7px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div><div class="brand">📋 Room Attendance</div><div class="sub" id="roomLabel">Not connected</div></div><button class="btn secondary" id="shareBtn">Share</button></header>
+
+<section id="home">
+<div class="card">
+<h2>Create a room</h2><p class="notice">Everyone who joins can mark or correct attendance.</p>
+<input id="roomName" placeholder="Room name (e.g. Hostel Room 12)">
+<button class="btn blue" style="width:100%;margin-top:10px" id="createBtn">Create room</button>
+</div>
+<div class="card">
+<h2>Join a room</h2><input id="joinCode" placeholder="Enter room code" autocapitalize="characters">
+<button class="btn" style="width:100%;margin-top:10px" id="joinBtn">Join room</button>
+</div>
+</section>
+
+<section id="room" class="hidden">
+<div class="card">
+<div class="row wrap" style="justify-content:space-between"><div><span class="badge" id="codeBadge"></span></div><button class="btn secondary" id="copyBtn">Copy code</button></div>
+<div style="margin-top:12px"><label class="notice">Your name</label><input id="actorName" placeholder="e.g. Rahul"></div>
+</div>
+
+<div class="tabs">
+<button class="tab active" data-tab="today">Today</button>
+<button class="tab" data-tab="members">Members</button>
+</div>
+
+<div id="todayTab">
+<div class="card">
+<h2 id="dateTitle">Today's Attendance</h2>
+<div class="grid" id="stats"></div>
+</div>
+<div class="card"><p class="notice">Attendance is for today only. When the date changes, the previous day is automatically cleared.</p><div id="attendanceList"></div></div>
+</div>
+
+<div id="membersTab" class="hidden">
+<div class="card"><h2>Room members</h2><div class="row"><input id="newMember" placeholder="Student name"><button class="btn blue" id="addMember">Add</button></div><div id="membersList" style="margin-top:8px"></div></div>
+</div>
+
+</section>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let state=null, roomCode=localStorage.roomCode||"", ws=null;
+const today=()=>new Date().toISOString().slice(0,10);
+$("datePicker").value=today();
+
+async function api(url,opts={}){const r=await fetch(url,{headers:{"Content-Type":"application/json"},...opts});const d=await r.json();if(!r.ok)throw Error(d.error||"Request failed");return d}
+function save(){localStorage.roomCode=roomCode}
+function render(){
+ if(!state)return;
+ $("home").classList.add("hidden");$("room").classList.remove("hidden");
+ $("roomLabel").textContent=state.name+" • "+state.members.length+" members";
+ $("codeBadge").textContent="ROOM "+state.code;
+ const date=today(), a=state.attendance[date]||{};
+ let p=0,x=0,l=0;
+ state.members.forEach(m=>{if(a[m.id]==="present")p++;if(a[m.id]==="absent")x++;if(a[m.id]==="leave")l++});
+ $("stats").innerHTML=`<div class="stat"><b>${p}</b><span>Present</span></div><div class="stat"><b>${x}</b><span>Absent</span></div><div class="stat"><b>${l}</b><span>Leave</span></div><div class="stat"><b>${state.members.length}</b><span>Total</span></div>`;
+ $("attendanceList").innerHTML=state.members.length?state.members.map(m=>{
+   const s=a[m.id]||"", pct=percentage(m.id);
+   return `<div class="member"><div><div class="name">${esc(m.name)}</div><div class="pct">${pct}% attendance</div></div><div class="actions">
+   ${button("P","present",s,m.id)}${button("A","absent",s,m.id)}${button("L","leave",s,m.id)}</div></div>`
+ }).join(""):`<div class="empty">Add members in the Members tab.</div>`;
+ $("membersList").innerHTML=state.members.length?state.members.map(m=>`<div class="member"><div class="name">${esc(m.name)}</div><button class="btn secondary danger" onclick="removeMember('${m.id}')">Remove</button></div>`).join(""):`<div class="empty">No members yet.</div>`;
+ $("logsList").innerHTML=state.logs.length?[...state.logs].reverse().map(l=>`<div class="log"><b>${esc(l.actor)}</b> ${esc(l.action)}<small>${new Date(l.at).toLocaleString()}</small></div>`).join(""):`<div class="empty">No activity yet.</div>`;
+}
+function button(label,status,current,id){return `<button class="mark ${status} ${current===status?"on":""}" onclick="mark('${status}','${id}')">${label}</button>`}
+function percentage(id){
+ let p=0,total=0;
+ for(const d of Object.values(state.attendance)){const s=d[id];if(s==="present"||s==="absent"){total++;if(s==="present")p++}}
+ return total?Math.round(p/total*100):0;
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+async function load(code){
+ try{state=await api("/api/rooms/"+code);roomCode=state.code;save();render();connect()}
+ catch(e){alert(e.message);localStorage.removeItem("roomCode");roomCode="";}
+}
+function connect(){
+ if(ws)ws.close();
+ const proto=location.protocol==="https:"?"wss":"ws";
+ ws=new WebSocket(`${proto}://${location.host}`);
+ ws.onopen=()=>ws.send(JSON.stringify({code:roomCode}));
+ ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="state"){state=m.state;render()}};
+}
+$("createBtn").onclick=async()=>{try{const r=await api("/api/rooms",{method:"POST",body:JSON.stringify({name:$("roomName").value||"My Room"})});await load(r.code)}catch(e){alert(e.message)}};
+$("joinBtn").onclick=()=>load($("joinCode").value.trim().toUpperCase());
+$("addMember").onclick=async()=>{const n=$("newMember").value.trim();if(!n)return;try{await api(`/api/rooms/${roomCode}/members`,{method:"POST",body:JSON.stringify({name:n})});$("newMember").value=""}catch(e){alert(e.message)}};
+window.removeMember=async id=>{if(!confirm("Remove this member?"))return;try{await api(`/api/rooms/${roomCode}/members/${id}`,{method:"DELETE"})}catch(e){alert(e.message)}};
+window.mark=async (status,memberId)=>{
+ const actor=$("actorName").value.trim();
+ if(!actor){$("actorName").focus();alert("Enter your name first.");return}
+ try{
+   await api(`/api/rooms/${roomCode}/attendance`,{method:"POST",body:JSON.stringify({
+     date:today(),memberId,status,actor
+   })});
+ }catch(e){alert(e.message)}
+};
+$("copyBtn").onclick=async()=>{await navigator.clipboard.writeText(roomCode);alert("Room code copied: "+roomCode)};
+$("shareBtn").onclick=async()=>{const text=`Join my Room Attendance tracker. Room code: ${roomCode}\n${location.href}`;if(navigator.share)await navigator.share({title:"Room Attendance",text});else{await navigator.clipboard.writeText(text);alert("Share text copied.")}};
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");["todayTab","membersTab"].forEach(x=>$(x).classList.add("hidden"));$(b.dataset.tab==="today"?"todayTab":"membersTab").classList.remove("hidden")});
+if(roomCode)load(roomCode);
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))}
+</script>
+</body>
+</html>

@@ -11,7 +11,31 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = process.env.DATA_FILE || (process.env.RENDER ? "/var/data/data.json" : path.join(__dirname, "data.json"));
+const LOCAL_DATA_FILE = path.join(__dirname, "data.json");
+
+function canWriteTo(filePath) {
+  try {
+    const dir = path.dirname(filePath);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.accessSync(dir, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveDataFile() {
+  if (process.env.DATA_FILE) return process.env.DATA_FILE;
+  if (!process.env.RENDER) return LOCAL_DATA_FILE;
+
+  const renderDataFile = "/var/data/data.json";
+  if (canWriteTo(renderDataFile)) return renderDataFile;
+
+  console.warn(`Persistent disk path unavailable at ${renderDataFile}; falling back to local data file.`);
+  return LOCAL_DATA_FILE;
+}
+
+const DATA_FILE = resolveDataFile();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));

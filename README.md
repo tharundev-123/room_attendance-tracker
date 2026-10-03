@@ -33,7 +33,7 @@ Build command: `npm install`
 Start command: `npm start`
 
 The app stores its data in `data.json`. For production, attach persistent disk/storage if the hosting provider uses an ephemeral filesystem.
-On Render, the server automatically uses `/var/data/data.json` when `RENDER` is set.
+On Render, the server tries `/var/data/data.json` first and automatically falls back to local `data.json` if `/var/data` is unavailable (fallback storage is ephemeral).
 
 ## Features
 

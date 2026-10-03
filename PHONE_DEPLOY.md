@@ -16,7 +16,7 @@
 9. Open that URL on your phone.
 10. Create a room and share the URL + room code with everyone.
 
-The included Render configuration uses persistent storage for `data.json`.
+The included Render configuration is set up for persistent storage. If `/var/data` is unavailable in your service configuration, the app falls back to local `data.json` (which is not persistent across redeploys/restarts on ephemeral filesystems).
 
 ## Installing it like an app
 

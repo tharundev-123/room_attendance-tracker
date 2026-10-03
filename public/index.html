@@ -79,7 +79,9 @@ const today=()=>new Date().toISOString().slice(0,10);
 $("datePicker").value=today();
 
 async function api(url,opts={}){
- const r=await fetch(url,{headers:{"Content-Type":"application/json"},...opts});
+ const endpoint=String(url||"");
+ if(!endpoint.startsWith("/api/")) throw Error("Invalid API path");
+ const r=await fetch(endpoint,{headers:{"Content-Type":"application/json"},...opts});
  const t=await r.text();
  let d={};
  try{d=t?JSON.parse(t):{}}catch{d={error:"Invalid server response"}}
@@ -101,16 +103,19 @@ function render(){
    return `<div class="member"><div><div class="name">${esc(m.name)}</div><div class="pct">${pct}% attendance</div></div><div class="actions">
    ${button("P","present",s,m.id)}${button("A","absent",s,m.id)}${button("L","leave",s,m.id)}</div></div>`
  }).join(""):`<div class="empty">Add members in the Members tab.</div>`;
- $("membersList").innerHTML=state.members.length?state.members.map(m=>`<div class="member"><div class="name">${esc(m.name)}</div><button class="btn secondary danger" onclick="removeMember('${m.id}')">Remove</button></div>`).join(""):`<div class="empty">No members yet.</div>`;
+ $("membersList").innerHTML=state.members.length?state.members.map(m=>`<div class="member"><div class="name">${esc(m.name)}</div><button class="btn secondary danger" data-remove-id="${escAttr(m.id)}">Remove</button></div>`).join(""):`<div class="empty">No members yet.</div>`;
  $("logsList").innerHTML=state.logs.length?[...state.logs].reverse().map(l=>`<div class="log"><b>${esc(l.actor)}</b> ${esc(l.action)}<small>${new Date(l.at).toLocaleString()}</small></div>`).join(""):`<div class="empty">No activity yet.</div>`;
+ document.querySelectorAll("[data-remove-id]").forEach(btn=>btn.onclick=()=>window.removeMember(btn.dataset.removeId));
+ document.querySelectorAll("[data-mark][data-member-id]").forEach(btn=>btn.onclick=()=>window.mark(btn.dataset.mark,btn.dataset.memberId));
 }
-function button(label,status,current,id){return `<button class="mark ${status} ${current===status?"on":""}" onclick="mark('${status}','${id}')">${label}</button>`}
+function button(label,status,current,id){return `<button class="mark ${status} ${current===status?"on":""}" data-mark="${status}" data-member-id="${escAttr(id)}">${label}</button>`}
 function percentage(id){
  let p=0,total=0;
  for(const d of Object.values(state.attendance)){const s=d[id];if(s==="present"||s==="absent"){total++;if(s==="present")p++}}
  return total?Math.round(p/total*100):0;
 }
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function escAttr(s){return esc(String(s))}
 async function load(code){
  try{state=await api("/api/rooms/"+code);roomCode=state.code;save();render();connect()}
  catch(e){alert(e.message);localStorage.removeItem("roomCode");roomCode="";}

@@ -78,7 +78,14 @@ let state=null, roomCode=localStorage.roomCode||"", ws=null;
 const today=()=>new Date().toISOString().slice(0,10);
 $("datePicker").value=today();
 
-async function api(url,opts={}){const r=await fetch(url,{headers:{"Content-Type":"application/json"},...opts});const d=await r.json();if(!r.ok)throw Error(d.error||"Request failed");return d}
+async function api(url,opts={}){
+ const r=await fetch(url,{headers:{"Content-Type":"application/json"},...opts});
+ const t=await r.text();
+ let d={};
+ try{d=t?JSON.parse(t):{}}catch{d={error:"Invalid server response"}}
+ if(!r.ok)throw Error(d.error||`Request failed (${r.status})`);
+ return d;
+}
 function save(){localStorage.roomCode=roomCode}
 function render(){
  if(!state)return;
@@ -109,11 +116,12 @@ async function load(code){
  catch(e){alert(e.message);localStorage.removeItem("roomCode");roomCode="";}
 }
 function connect(){
- if(ws)ws.close();
+ if(ws){ws.onclose=null;ws.close()}
  const proto=location.protocol==="https:"?"wss":"ws";
  ws=new WebSocket(`${proto}://${location.host}`);
  ws.onopen=()=>ws.send(JSON.stringify({code:roomCode}));
- ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="state"){state=m.state;render()}};
+ ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==="state"){state=m.state;render()}}catch{}};
+ ws.onclose=()=>{if(roomCode)setTimeout(()=>{if(roomCode)connect()},1200)};
 }
 $("createBtn").onclick=async()=>{try{const r=await api("/api/rooms",{method:"POST",body:JSON.stringify({name:$("roomName").value||"My Room"})});await load(r.code)}catch(e){alert(e.message)}};
 $("joinBtn").onclick=()=>load($("joinCode").value.trim().toUpperCase());

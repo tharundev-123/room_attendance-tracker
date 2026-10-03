@@ -15,6 +15,12 @@ npm start
 
 4. Open `http://localhost:3000`.
 
+Optional custom data path:
+
+```bash
+DATA_FILE=/absolute/path/data.json npm start
+```
+
 For phones on the same Wi-Fi, use the computer's local IP, for example:
 
 `http://192.168.1.10:3000`
@@ -27,6 +33,7 @@ Build command: `npm install`
 Start command: `npm start`
 
 The app stores its data in `data.json`. For production, attach persistent disk/storage if the hosting provider uses an ephemeral filesystem.
+On Render, the server automatically uses `/var/data/data.json` when `RENDER` is set.
 
 ## Features
 

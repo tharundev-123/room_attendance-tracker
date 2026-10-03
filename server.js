@@ -18,12 +18,19 @@ app.use(express.static(path.join(__dirname, "public")));
 
 function normalizeRoom(room, code) {
   if (!room || typeof room !== "object") return null;
+  const rawAttendance = room.attendance && typeof room.attendance === "object" ? room.attendance : {};
+  const attendance = Object.fromEntries(
+    Object.entries(rawAttendance).map(([date, marks]) => [
+      date,
+      marks && typeof marks === "object" ? marks : {}
+    ])
+  );
 
   return {
     code: room.code || code,
     name: typeof room.name === "string" && room.name.trim() ? room.name : "My Room",
     members: Array.isArray(room.members) ? room.members : [],
-    attendance: room.attendance && typeof room.attendance === "object" ? room.attendance : {},
+    attendance,
     logs: Array.isArray(room.logs) ? room.logs : [],
     createdAt: room.createdAt || new Date().toISOString()
   };
@@ -225,6 +232,10 @@ app.post("/api/rooms/:code/attendance", (req, res) => {
 });
 
 wss.on("connection", ws => {
+  ws.on("error", error => {
+    console.error("WebSocket client error:", error.message);
+  });
+
   ws.on("message", raw => {
     try {
       const msg = JSON.parse(raw.toString());
@@ -233,12 +244,39 @@ wss.on("connection", ws => {
       if (room) {
         ws.roomCode = code;
         ws.send(JSON.stringify({ type: "state", state: snapshot(room) }));
+      } else {
+        ws.send(JSON.stringify({ type: "error", error: "Room not found" }));
       }
     } catch (error) {
       console.error("WebSocket message error:", error.message);
+      ws.send(JSON.stringify({ type: "error", error: "Invalid message" }));
     }
   });
 });
 
-app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+wss.on("error", error => {
+  console.error("WebSocket server error:", error.message);
+});
+
+app.use((error, req, res, next) => {
+  if (error instanceof SyntaxError && "body" in error) {
+    return res.status(400).json({ error: "Invalid JSON body" });
+  }
+  next(error);
+});
+
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+app.use((req, res, next) => {
+  if (req.method !== "GET") return next();
+  if (!req.accepts("html")) return next();
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.use((req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
 server.listen(PORT, () => console.log(`Room Attendance Tracker running on port ${PORT}`));
